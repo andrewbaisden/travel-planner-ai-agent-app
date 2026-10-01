@@ -2,8 +2,6 @@
 
 This application uses a local Ollama model by default to generate travel plans from your preferences. Set `GROQ_API_KEY` and the same Simple and Agentic workflows can run on Groq through [Agno](https://docs.agno.com). Groq models show up in the dropdown with a `groq:` prefix. With no key, Ollama still runs the app.
 
-The freeCodeCamp article [How to Build a Team of AI Agents for Your Website for Free Using Agno and Groq](https://www.freecodecamp.org/news/build-a-team-of-ai-agents-for-your-website-for-free/) is a separate portfolio tutorial. This repository is the travel planner.
-
 ## Features
 
 - **Local Model Execution**: Uses Ollama to run models locally on your machine
