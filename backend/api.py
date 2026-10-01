@@ -1,14 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 import logging
-import ollama
-import json
 
 
-from agent import TravelAgent
-from app import SimpleOllamaAgent
+from llm import list_models
 
 
 logging.basicConfig(level=logging.INFO,
@@ -57,35 +54,7 @@ async def root():
 
 @app.get("/models")
 async def get_models():
-
-    try:
-        response = ollama.list()
-        available_models = []
-
-        if hasattr(response, 'models') and isinstance(response.models, list):
-
-            for model in response.models:
-                if hasattr(model, 'model'):
-                    model_name = str(model.model)
-
-                    if model_name.endswith(":latest"):
-                        model_name = model_name.replace(":latest", "")
-                    available_models.append(model_name)
-        elif isinstance(response, dict) and 'models' in response:
-
-            for model in response['models']:
-                if 'name' in model:
-                    available_models.append(model['name'])
-
-        if not available_models:
-
-            available_models = ["llama3", "mistral", "gemma", "phi3"]
-
-        return {"models": available_models}
-    except Exception as e:
-        logger.error(f"Error getting models: {e}")
-
-        return {"models": ["llama3", "mistral", "gemma", "phi3"]}
+    return {"models": list_models()}
 
 
 @app.post("/travel-plan", response_model=TravelPlanResponse)

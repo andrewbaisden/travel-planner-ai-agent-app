@@ -1,12 +1,9 @@
-import os
 import gradio as gr
-from typing import Dict, List, Any
 import logging
-import ollama
-import json
 
 
 from agent import TravelAgent
+from llm import SimpleOllamaAgent, create_language_model, list_models, list_ollama_models
 
 
 logging.basicConfig(level=logging.INFO,
@@ -14,180 +11,41 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
-class SimpleOllamaAgent:
-    def __init__(self, model_name="llama3"):
-        self.model_name = model_name
-        logger.info(f"Initializing SimpleOllamaAgent with model: {model_name}")
-
-    def run(self, prompt):
-        try:
-            logger.info(f"Generating with Ollama model: {self.model_name}")
-            response = ollama.generate(model=self.model_name, prompt=prompt)
-            return response['response']
-        except Exception as e:
-            logger.error(f"Error generating with Ollama: {e}")
-            return "I'm sorry, I couldn't generate a response. Please try again."
+def _fallback_plan(user_query: str) -> str:
+    return f"""
+        # Travel Plan (Fallback Mode)
+        
+        We encountered some issues while creating your travel plan.
+        
+        Based on your preferences: "{user_query}", please try again later or try with a different model.
+        
+        Ollama is the default runtime. For a Groq model, set GROQ_API_KEY in .env and pick a name that starts with groq:.
+        """
 
 
 def create_travel_plan(user_query, model_name="llama3"):
 
-    logger.info("Starting travel plan creation...")
+    logger.info("Starting travel plan creation with model: %s", model_name)
 
     try:
-
-        try:
-            logger.info(f"Using Ollama with model: {model_name}")
-
-            try:
-                response = ollama.list()
-                logger.info(f"Ollama response: {response}")
-
-                available_models = []
-
-                if hasattr(response, 'models') and isinstance(response.models, list):
-
-                    for model in response.models:
-                        if hasattr(model, 'model'):
-                            model_name_str = str(model.model)
-
-                            if model_name_str.endswith(":latest"):
-                                model_name_str = model_name_str.replace(
-                                    ":latest", "")
-                            available_models.append(model_name_str)
-                elif isinstance(response, dict) and 'models' in response:
-
-                    for model in response['models']:
-                        if 'name' in model:
-                            available_models.append(model['name'])
-
-                logger.info(f"Available models: {available_models}")
-
-                if model_name in available_models:
-                    logger.info(f"Found requested model: {model_name}")
-
-                    agent = SimpleOllamaAgent(model_name=model_name)
-
-                elif available_models:
-                    logger.warning(
-                        f"Requested model {model_name} not found. Available models: {available_models}")
-                    logger.info(
-                        f"Using first available model: {available_models[0]}")
-                    model_name = available_models[0]
-
-                    agent = SimpleOllamaAgent(model_name=model_name)
-
-                else:
-                    logger.warning("No models available in Ollama")
-                    raise Exception(
-                        "No models available in Ollama. Please run 'ollama pull llama3' to download a model.")
-            except Exception as e:
-                logger.error(f"Error checking Ollama models: {e}")
-                raise Exception(f"Error with Ollama: {e}")
-
-        except Exception as e:
-            logger.error(f"Error initializing Ollama model: {e}")
-            logger.info("Falling back to fallback response...")
-            raise e
-
-        travel_plan = generate_travel_plan(agent, user_query)
-
-        return travel_plan
-
+        agent = create_language_model(model_name)
+        return generate_travel_plan(agent, user_query)
     except Exception as e:
         logger.error(f"Error in create_travel_plan: {e}")
-
-        fallback_text = f"""
-        # Travel Plan (Fallback Mode)
-        
-        We encountered some issues while creating your travel plan.
-        
-        Based on your preferences: "{user_query}", please try again later or try with a different model.
-        
-        If the issue persists, make sure Ollama is properly installed and running.
-        """
-
-        return fallback_text
+        return _fallback_plan(user_query)
 
 
 def create_travel_plan_agentic(user_query, model_name="llama3"):
 
-    logger.info("Starting agentic travel plan creation...")
+    logger.info("Starting agentic travel plan creation with model: %s", model_name)
 
     try:
-
-        try:
-            logger.info(f"Using Ollama with model: {model_name}")
-
-            try:
-                response = ollama.list()
-                logger.info(f"Ollama response: {response}")
-
-                available_models = []
-
-                if hasattr(response, 'models') and isinstance(response.models, list):
-
-                    for model in response.models:
-                        if hasattr(model, 'model'):
-                            model_name_str = str(model.model)
-
-                            if model_name_str.endswith(":latest"):
-                                model_name_str = model_name_str.replace(
-                                    ":latest", "")
-                            available_models.append(model_name_str)
-                elif isinstance(response, dict) and 'models' in response:
-
-                    for model in response['models']:
-                        if 'name' in model:
-                            available_models.append(model['name'])
-
-                logger.info(f"Available models: {available_models}")
-
-                if model_name in available_models:
-                    logger.info(f"Found requested model: {model_name}")
-
-                    ollama_agent = SimpleOllamaAgent(model_name=model_name)
-
-                elif available_models:
-                    logger.warning(
-                        f"Requested model {model_name} not found. Available models: {available_models}")
-                    logger.info(
-                        f"Using first available model: {available_models[0]}")
-                    model_name = available_models[0]
-
-                    ollama_agent = SimpleOllamaAgent(model_name=model_name)
-
-                else:
-                    logger.warning("No models available in Ollama")
-                    raise Exception(
-                        "No models available in Ollama. Please run 'ollama pull llama3' to download a model.")
-            except Exception as e:
-                logger.error(f"Error checking Ollama models: {e}")
-                raise Exception(f"Error with Ollama: {e}")
-
-        except Exception as e:
-            logger.error(f"Error initializing Ollama model: {e}")
-            logger.info("Falling back to fallback response...")
-            raise e
-
-        travel_agent = TravelAgent(ollama_agent, model_name=model_name)
-
-        workflow_results = travel_agent.run_workflow(user_query)
-
-        return workflow_results
-
+        agent = create_language_model(model_name)
+        travel_agent = TravelAgent(agent, model_name=agent.model_name)
+        return travel_agent.run_workflow(user_query)
     except Exception as e:
         logger.error(f"Error in create_travel_plan_agentic: {e}")
-
-        fallback_text = f"""
-        # Travel Plan (Fallback Mode)
-        
-        We encountered some issues while creating your travel plan.
-        
-        Based on your preferences: "{user_query}", please try again later or try with a different model.
-        
-        If the issue persists, make sure Ollama is properly installed and running.
-        """
-
+        fallback_text = _fallback_plan(user_query)
         return {
             "plan": {},
             "research": {},
@@ -237,34 +95,11 @@ with gr.Blocks(title="Travel Planner") as demo:
             lines=5
         )
 
-    default_models = ["llama3", "mistral", "gemma", "phi3"]
-    try:
-        response = ollama.list()
-        available_models = []
-
-        if hasattr(response, 'models') and isinstance(response.models, list):
-
-            for model in response.models:
-                if hasattr(model, 'model'):
-                    model_name = str(model.model)
-
-                    if model_name.endswith(":latest"):
-                        model_name = model_name.replace(":latest", "")
-                    available_models.append(model_name)
-        elif isinstance(response, dict) and 'models' in response:
-
-            for model in response['models']:
-                if 'name' in model:
-                    available_models.append(model['name'])
-
-        if available_models:
-            default_models = available_models
-    except Exception as e:
-        logger.warning(f"Could not get Ollama models: {e}")
+    default_models = list_models()
 
     with gr.Row():
         model_dropdown = gr.Dropdown(
-            label="Ollama Model",
+            label="Model",
             choices=default_models,
             value=default_models[0] if default_models else "llama3"
         )
@@ -360,48 +195,22 @@ if __name__ == "__main__":
     import sys
 
     try:
-
-        try:
-            response = ollama.list()
-            logger.info(f"Ollama response: {response}")
-
-            available_models = []
-
-            if hasattr(response, 'models') and isinstance(response.models, list):
-
-                for model in response.models:
-                    if hasattr(model, 'model'):
-                        model_name = str(model.model)
-
-                        if model_name.endswith(":latest"):
-                            model_name = model_name.replace(":latest", "")
-                        available_models.append(model_name)
-            elif isinstance(response, dict) and 'models' in response:
-
-                for model in response['models']:
-                    if 'name' in model:
-                        available_models.append(model['name'])
-
-            if available_models:
-                logger.info(
-                    f"Ollama is running with models: {', '.join(available_models)}")
-                print(
-                    f"\n✅ Ollama is running with available models: {', '.join(available_models)}")
-            else:
-                logger.warning("Ollama is running but no models are available")
-                print(
-                    "\n⚠️  Ollama is running but no models are available. Please pull a model:")
-                print("   Run: ollama pull llama3")
-        except Exception as e:
-            logger.warning(f"Ollama might not be running: {e}")
+        available_models = list_ollama_models()
+        if available_models:
+            logger.info(
+                "Ollama is running with models: %s", ", ".join(available_models))
             print(
-                "\n⚠️  Warning: Ollama might not be running. Please make sure Ollama is installed and running.")
-            print("   Install from: https://ollama.ai")
-            print("   After installing, start Ollama and run: ollama pull llama3\n")
+                f"\n✅ Ollama is running with available models: {', '.join(available_models)}")
+        else:
+            logger.warning("Ollama is running but no models are available")
+            print(
+                "\n⚠️  Ollama is running but no models are available. Please pull a model:")
+            print("   Run: ollama pull llama3")
     except Exception as e:
-        logger.error(f"Error checking Ollama: {e}")
+        logger.warning(f"Ollama might not be running: {e}")
         print(
-            "\n⚠️  Error checking Ollama. Please make sure Ollama is installed and running.")
-        print("   Install from: https://ollama.ai\n")
+            "\n⚠️  Warning: Ollama might not be running. Please make sure Ollama is installed and running.")
+        print("   Install from: https://ollama.ai")
+        print("   After installing, start Ollama and run: ollama pull llama3\n")
 
     demo.launch()
